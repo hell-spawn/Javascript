@@ -1,2 +1,6 @@
 # AutoEstudio
-Repositorio Para pruebas y estudio
+
+Este es un repositorio de estudio, pruebas y otras cosas, 
+nada va en serio.
+
+
