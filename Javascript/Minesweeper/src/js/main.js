@@ -39,7 +39,7 @@ function mineFieldEmpty() {
 
 function putMines() {
     var mines = 0;
-    while (mines < MineSweeper.numRows) {
+    while (mines < MineSweeper.totalMine) {
         var row = Math.floor(Math.random() * MineSweeper.numRows);
         var column = Math.floor(Math.random() * MineSweeper.numColumns);
         if (MineSweeper.boardMines[row][column] != 'X') {
@@ -76,9 +76,9 @@ function countMines() {
 
 
 function initGame(){
-    MineSweeper.numRows = 15;
-    MineSweeper.numColumns = 15;
-    MineSweeper.totalMine = 15;
+    MineSweeper.numRows = 10;
+    MineSweeper.numColumns = 10;
+    MineSweeper.totalMine = 5;
     printTable();
     mineFieldEmpty();
     putMines();
@@ -199,7 +199,6 @@ function resolveBoard(isOk){
             }
         }
     }
-
     if(this.isOk){
         alert('gg....');
     } 
