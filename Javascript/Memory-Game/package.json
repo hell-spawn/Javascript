@@ -1,0 +1,15 @@
+{
+    "name": "MemoryGame",
+    "version": "1.0.0",
+    "description": "JS Vanilla Memory Game",
+    "main": "src/js/main.js",
+    "scripts": {
+        "test": "",
+        "start": "lite-server"
+    },
+    "author": "hell-spawn",
+    "license": "ISC",
+    "devDependencies": {
+        "lite-server": "^2.5.4"
+    }
+}
