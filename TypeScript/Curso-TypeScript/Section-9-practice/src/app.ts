@@ -1,32 +1,82 @@
 // Code goes here!
 
+//Drag and Drop
+
+interface Draggable {
+
+    dragStartHandler(event: DragEvent): void;
+
+    dragEndHandler(event: DragEvent): void;
+}
+
+interface DragTarget {
+
+    dragOverHandler(event: DragEvent): void;
+
+    dropHandler(event: DragEvent): void;
+
+    dragLeaveHandler(event: DragEvent): void;
+
+}
+
+
 enum ProjectStatus {
     ACTIVE,
     FINISHED
 }
 
-abstract class ProjectComponent<T extends HTMLElement, U extends HTMLElement> {
 
-    templateElement: HTMLTemplateElement;
-    appElement: T;
-    mainElement: U;
+interface Validatable {
+    required: boolean;
+    value: string | number;
+    maxLength?: number;
+    minLength?: number;
+    min?: number;
+    max?: number;
+}
 
-    constructor(private templateId: string, private appId: string, private mainId: string, insertAtBeginning: boolean ){
-        this.templateElement = document.getElementById(this.templateId)! as HTMLTemplateElement;
-        this.appElement = document.getElementById(this.appId)! as T;
-        const mainNode = document.importNode(this.templateElement.content, true);
-        this.mainElement = mainNode.firstElementChild as U;
-        this.mainElement.id = this.mainId;
-        this.attach(insertAtBeginning);
+function validate(validation: Validatable): boolean {
+    let isValid = true;
+    if( validation.required ){
+        isValid = isValid && ( validation.value !== null ) &&  (validation.value.toString().trim().length > 0);
+    }
+    if( isValid && validation.minLength ){
+        isValid = isValid && validation.value.toString().trim().length >= validation.minLength;
     }
 
-    private attach(insertAtBeginning: boolean){
-        if(insertAtBeginning){
-            this.appElement.insertAdjacentElement('afterbegin', this.mainElement);
+    if( isValid && validation.maxLength){
+        isValid = isValid && validation.value.toString().trim().length <= validation.maxLength;
+    }
+    if(isValid && validation.min){
+        if( typeof validation.value === 'number' ){
+            isValid = isValid && validation.value >= validation.min;
         } else {
-            this.appElement.insertAdjacentElement('beforeend', this.mainElement);
-        }    
+            isValid = false;
+        }
     }
+    if(isValid && validation.max){
+        if( typeof validation.value === 'number' ){
+            isValid = isValid && validation.value <= validation.max;
+        } else {
+            isValid = false;
+        }
+    }
+    return isValid; 
+}
+
+// autobind Decorator
+function autobind(_target: any, _methodName: string, descriptor: PropertyDescriptor) {
+    const originaleMethod = descriptor.value;	
+    const adjDescriptor: PropertyDescriptor = {
+        configurable: true,
+        enumerable: false,
+        get(){
+            const boundFn = originaleMethod.bind(this);
+            return boundFn;
+        }
+    };
+
+    return adjDescriptor;
 }
 
 //Object Project
@@ -75,70 +125,66 @@ class ProjectState extends State<Project> {
         }
     }
 
+
+    changeProjectStatus(projectId: string, newStatus: ProjectStatus){
+        let project = this.projects.find(project => {
+            return project.id === projectId;
+        });
+        if(project && project.status !== newStatus){
+            project.status = newStatus;
+            this.updateListeners();
+        }
+    }
+
+    private updateListeners(){
+        for (const listenerFun of this.listeners) {
+           listenerFun(this.projects.slice()); 
+        }
+    }
+
 }
 
-//Validations
-interface Validatable {
-    required: boolean;
-    value: string | number;
-    maxLength?: number;
-    minLength?: number;
-    min?: number;
-    max?: number;
-}
+abstract class ProjectComponent<T extends HTMLElement, U extends HTMLElement> {
 
+    templateElement: HTMLTemplateElement;
+    parentElement: T;
+    newElement: U;
 
-function validate(validation: Validatable): boolean {
-    let isValid = true;
-    if( validation.required ){
-        isValid = isValid && ( validation.value !== null ) &&  (validation.value.toString().trim().length > 0);
-    }
-    if( isValid && validation.minLength ){
-        isValid = isValid && validation.value.toString().trim().length >= validation.minLength;
+    constructor(templateId: string, appId: string,  insertAtBeginning: boolean, mainId? :string ){
+        this.templateElement = document.getElementById(templateId)! as HTMLTemplateElement;
+        this.parentElement = document.getElementById(appId)! as T;
+        const mainNode = document.importNode(this.templateElement.content, true);
+        this.newElement = mainNode.firstElementChild as U;
+        if(mainId){
+            this.newElement.id = mainId;
+        }
+        this.attach(insertAtBeginning);
     }
 
-    if( isValid && validation.maxLength){
-        isValid = isValid && validation.value.toString().trim().length <= validation.maxLength;
-    }
-    if(isValid && validation.min){
-        if( typeof validation.value === 'number' ){
-            isValid = isValid && validation.value >= validation.min;
+    private attach(insertAtBeginning: boolean){
+        if(insertAtBeginning){
+            this.parentElement.insertAdjacentElement('afterbegin', this.newElement);
         } else {
-            isValid = false;
-        }
+            this.parentElement.insertAdjacentElement('beforeend', this.newElement);
+        }    
     }
-    if(isValid && validation.max){
-        if( typeof validation.value === 'number' ){
-            isValid = isValid && validation.value <= validation.max;
-        } else {
-            isValid = false;
-        }
-    }
-    return isValid; 
 }
 
-// Autobind Decorator
-function Autobind(_target: any, _methodName: string, descriptor: PropertyDescriptor) {
-    const originaleMethod = descriptor.value;	
-    const adjDescriptor: PropertyDescriptor = {
-        configurable: true,
-        enumerable: false,
-        get(){
-            const boundFn = originaleMethod.bind(this);
-            return boundFn;
-        }
-    };
-
-    return adjDescriptor;
-}
-
-class ProjectList  extends ProjectComponent<HTMLDivElement, HTMLElement> {
+class ProjectList  extends ProjectComponent<HTMLDivElement, HTMLElement> implements DragTarget {
 
     assignedProjects: Project[];
 
     constructor(private type: 'active' | 'finished') {
-        super('project-list', 'app', `${type}-projects`, false);
+        super('project-list', 'app', false, `${type}-projects`);
         this.assignedProjects = [];
+        this.configure();
+        this.renderElement();
+    }
+   
+    private configure(){
+        this.newElement.addEventListener('dragover', this.dragOverHandler);
+        this.newElement.addEventListener('dragleave', this.dragLeaveHandler);
+        this.newElement.addEventListener('drop', this.dropHandler);
         projectState.addListeners((projects: Project[]) => {
             let categoryProjects = projects.filter((project) => {
                 if(this.type === 'active'){
@@ -150,28 +196,44 @@ class ProjectList  extends ProjectComponent<HTMLDivElement, HTMLElement> {
             this.assignedProjects = categoryProjects;
             this.renderProjects();
         });
-        this.renderElement();
-    }
-
-
-
+    } 
 
     private renderProjects(){
         const containerList = document.getElementById(`${this.type}-project-list`)! as HTMLUListElement;
         containerList.innerHTML = '';
-        for(const projectItem of this.assignedProjects){
-            const elementProject = document.createElement('li'); 
-            elementProject.textContent = projectItem.title;
-            containerList.appendChild(elementProject); 
+        for(const project of this.assignedProjects){
+            new ProjectItem(this.newElement.querySelector('ul')!.id, project)
         }
     }
 
     private renderElement(){
         const listId = `${this.type}-project-list`; 
-        this.mainElement.querySelector('ul')!.id = listId;
-        this.mainElement.querySelector('h2')!.textContent = this.type.toUpperCase();
+        this.newElement.querySelector('ul')!.id = listId;
+        this.newElement.querySelector('h2')!.textContent = this.type.toUpperCase();
     }
 
+    @autobind
+    dragOverHandler(event: DragEvent){
+        event.preventDefault();
+        if(event.dataTransfer && event.dataTransfer.types[0] === 'text/plain'){
+            const listElement = this.newElement.querySelector('ul')!;
+            listElement.classList.add('droppable');
+        }
+    }
+
+    @autobind
+    dragLeaveHandler(_event: DragEvent){
+        const listElement = this.newElement.querySelector('ul')!;
+        listElement.classList.remove('droppable');
+    }
+
+   
+    @autobind 
+    dropHandler(event: DragEvent){
+        event.preventDefault();
+        const projectId = event.dataTransfer!.getData('text/plain');
+        projectState.changeProjectStatus(projectId, this.type === 'active' ? ProjectStatus.ACTIVE : ProjectStatus.FINISHED);
+    }
 }
 
 /*Main project*/
@@ -182,15 +244,15 @@ class ProjectInput extends ProjectComponent <HTMLDivElement, HTMLFormElement>{
     peopleElement: HTMLInputElement;
 
     constructor() {
-        super('project-input', 'app', 'user-input', true);
-        this.titleElement = this.mainElement.querySelector('#title') as HTMLInputElement;
-        this.descriptionElement = this.mainElement.querySelector('#description') as HTMLInputElement;
-        this.peopleElement = this.mainElement.querySelector('#people') as HTMLInputElement;
+        super('project-input', 'app', true, 'user-input');
+        this.titleElement = this.newElement.querySelector('#title') as HTMLInputElement;
+        this.descriptionElement = this.newElement.querySelector('#description') as HTMLInputElement;
+        this.peopleElement = this.newElement.querySelector('#people') as HTMLInputElement;
         this.configure();
     }
 
     private configure(){
-        this.mainElement.addEventListener('submit', this.submitHandler);
+        this.newElement.addEventListener('submit', this.submitHandler);
     }
 
 
@@ -200,7 +262,7 @@ class ProjectInput extends ProjectComponent <HTMLDivElement, HTMLFormElement>{
         this.peopleElement.value = '';
     }
 
-    @Autobind
+    @autobind
     private submitHandler(event: Event){
         event.preventDefault();
         const dataInput =  this.builtUserInput();
@@ -245,6 +307,44 @@ class ProjectInput extends ProjectComponent <HTMLDivElement, HTMLFormElement>{
             return [title, description, +people];
         }
     }
+
+}
+
+class ProjectItem extends ProjectComponent<HTMLElement,HTMLElement> implements Draggable {
+
+    project: Project;
+
+    constructor(parentId: string, project: Project) {
+        super('single-project', parentId, false, project.id); 
+        this.project = project;
+        this.renderContent();
+        this.parentElement.addEventListener('dragstart', this.dragStartHandler);
+        this.parentElement.addEventListener('dragend', this.dragEndHandler);
+    }
+
+    get persons(){
+        if(this.project.people === 1){
+            return `${this.project.people} person assigned`
+        }
+        return `${this.project.people} persons assigned`
+
+    }
+
+    renderContent() {
+        this.newElement.querySelector('h2')!.textContent = this.project.title;
+        this.newElement.querySelector('h3')!.textContent = this.persons;
+        this.newElement.querySelector('p')!.textContent = this.project.description;
+    }
+
+    @autobind
+    dragStartHandler(event: DragEvent){
+        event.dataTransfer!.setData('text/plain', this.project.id);
+        event.dataTransfer!.effectAllowed = 'move';
+    }
+
+    dragEndHandler(_event: DragEvent){
+    }
+
 
 }
 
